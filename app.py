@@ -11,8 +11,6 @@ import google.generativeai as genai
 # -------------------------------------------------
 st.set_page_config(page_title="Karriere-Chatbot", page_icon="🤖", layout="wide")
 
-# Google Drive yolları kaldırıldı, yerine göreli (relative) yollar eklendi.
-# Bu dosyaların "assets" adında bir klasörde olduğunu varsayıyoruz.
 LOGO_BA_PATH = "assets/logo_ba.png"
 LOGO_COMPANY_PATH = "assets/logo_company.png"
 
@@ -70,15 +68,13 @@ def get_embeddings_model():
 @st.cache_resource
 def load_vectorstore(_embeddings):
     """Vektör veritabanını bir kez yükler ve cache'ler."""
-    
-    # Google Drive yolu kaldırıldı, "vectorstore" klasörünün ana dizinde olduğunu varsayıyoruz.
     vectorstore_path = "vectorstore" 
     
     if os.path.exists(vectorstore_path):
         return FAISS.load_local(
             vectorstore_path,
             _embeddings,
-            allow_dangerous_deserialization=True, # Güvenlik uyarısı için bu parametre gerekli
+            allow_dangerous_deserialization=True,
         )
     return None
 
@@ -93,8 +89,6 @@ def get_context_from_vectorstore(vectorstore, question, k=4):
 
 def ask_gemini(gemini_api_key: str, question: str, context: str) -> str:
     """Gemini modeline context ile birlikte soruyu sorar."""
-    
-    # API anahtarı yoksa ortam değişkeninden (Secrets) almayı dener
     if not gemini_api_key:
         gemini_api_key = os.getenv("GEMINI_API_KEY")
 
@@ -118,14 +112,16 @@ def ask_gemini(gemini_api_key: str, question: str, context: str) -> str:
         resp = model.generate_content(prompt)
         return resp.text
     except Exception as e:
-        st.error(f"Gemini API ile iletişimde bir hata oluştu: {str(e)}")
-        return "Bir hata nedeniyle cevap veremiyorum."
+        # Hata mesajını doğrudan göstermek yerine log'layabilir veya daha genel bir mesaj verebiliriz.
+        # st.error(f"Gemini API ile iletişimde bir hata oluştu: {str(e)}")
+        print(f"Gemini API Error: {e}")
+        return "Bir hata nedeniyle cevap veremiyorum. Lütfen API anahtarınızı kontrol edin veya daha sonra tekrar deneyin."
 
 # -------------------------------------------------
 # 4. STREAMLIT ARAYÜZÜ
 # -------------------------------------------------
 
-# API Anahtarını Streamlit Secrets'tan (ortam değişkeni) okumayı dener
+# API anahtarını ortam değişkenlerinden (Secrets) al
 api_key_from_env = os.getenv("GEMINI_API_KEY")
 
 if "language" not in st.session_state:
@@ -147,11 +143,14 @@ with st.sidebar:
         st.session_state.language = selected_language
         st.rerun()
 
-    # Kullanıcının manuel API anahtarı girmesine izin verir
-    # Varsayılan değer olarak Secrets'tan okunan anahtarı kullanır
-    gemini_api_key = st.text_input(
-        "Gemini API Key", type="password", value=api_key_from_env or ""
+    # Kenar çubuğunda manuel API anahtarı girmek için boş bir kutu
+    user_entered_key = st.text_input(
+        "Gemini API Key (Gerekirse)", type="password"
     )
+
+    # Önce kullanıcının girdiği anahtarı kullan, eğer boşsa Secrets'tan al.
+    gemini_api_key = user_entered_key or api_key_from_env
+
 
 col1, col2 = st.columns([1, 4])
 with col1:
@@ -181,24 +180,24 @@ if prompt:
         with st.chat_message("assistant"):
             st.error(texts["error_key"])
     else:
-        # Modelleri ve veritabanını yükle (cache sayesinde hızlı çalışır)
         try:
+            # Embedding'leri ve vectorstore'u cache'den yükle
             embeddings = get_embeddings_model()
             vectorstore = load_vectorstore(embeddings)
         except Exception as e:
             vectorstore = None
             st.error(f"Vektör veritabanı yüklenirken hata oluştu: {e}")
 
-        # Context'i al
         if vectorstore:
             with st.spinner("Dokümanlar aranıyor..."):
                 context_text, _ = get_context_from_vectorstore(vectorstore, prompt)
         else:
             context_text = ""
-            st.info(texts["no_vector"])
+            if 'vectorstore' in locals() and vectorstore is None:
+                 st.info(texts["no_vector"]) # Sadece yükleme başarısız olduysa göster
 
-        # Gemini'den cevabı al
         answer = ask_gemini(gemini_api_key, prompt, context_text)
         with st.chat_message("assistant"):
             st.markdown(answer)
         st.session_state.messages.append({"role": "assistant", "content": answer})
+
