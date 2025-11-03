@@ -7,7 +7,7 @@ Almanca ve İngilizce konuşabilen, doküman tabanlı (vectorstore + FAISS) bir 
 
 ## Özellikler
 - 🇩🇪 / 🇬🇧 dil seçimi
-- Gemini API ile cevap üretme
+- Groq API ile cevap üretme
 - FAISS vektör veritabanından bağlam çekerek daha doğru cevaplar verme
 - Streamlit arayüzü
 - Kolay deploy (Colab / local)
